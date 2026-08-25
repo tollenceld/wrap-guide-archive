@@ -40,6 +40,7 @@ final class PaperPlannerTests: XCTestCase {
         let plan = planner.evaluate(custom: PaperSpec(widthMM: 250, heightMM: 250), for: box)
         XCTAssertFalse(plan.isFeasible)
         XCTAssertEqual(plan.difficulty, .insufficient)
+        XCTAssertEqual(plan.cutSize, PaperSpec(widthMM: 415, heightMM: 350))
     }
 
     func testOversizedPaperRecommendsCutting() {
@@ -52,5 +53,34 @@ final class PaperPlannerTests: XCTestCase {
         let invalid = BoxDimensions(lengthMM: 0, widthMM: 100, heightMM: 20)
         XCTAssertTrue(planner.recommend(for: invalid).isEmpty)
     }
-}
 
+    func testInvalidPaperIsRejectedWithRealMinimum() {
+        let plan = planner.evaluate(custom: PaperSpec(widthMM: 0, heightMM: 0), for: box)
+
+        XCTAssertEqual(plan.difficulty, .insufficient)
+        XCTAssertEqual(plan.cutSize, PaperSpec(widthMM: 415, heightMM: 350))
+    }
+
+    func testAreaAloneDoesNotClaimThatPaperFits() {
+        let narrowSheet = PaperSpec(widthMM: 200, heightMM: 800)
+        XCTAssertGreaterThan(narrowSheet.area, PaperSpec(widthMM: 415, heightMM: 350).area)
+
+        let plan = planner.evaluate(custom: narrowSheet, for: box)
+
+        XCTAssertFalse(plan.isFeasible)
+        XCTAssertEqual(plan.difficulty, .insufficient)
+    }
+
+    func testRecommendationSortsHorizontalBoxAxes() throws {
+        let reversed = BoxDimensions(lengthMM: 138, widthMM: 214, heightMM: 62)
+        let plan = try XCTUnwrap(planner.recommend(for: reversed).first)
+
+        XCTAssertEqual(plan.cutSize, PaperSpec(widthMM: 430, heightMM: 370))
+        XCTAssertEqual(plan.orientation, .longAxis)
+    }
+
+    func testMetricAndImperialFormattingUseMillimetresInternally() {
+        XCTAssertEqual(box.formatted(unit: .metric), "21.4 × 13.8 × 6.2 cm")
+        XCTAssertEqual(PaperSpec(widthMM: 254, heightMM: 508).formatted(unit: .imperial), "10.0 × 20.0 in")
+    }
+}

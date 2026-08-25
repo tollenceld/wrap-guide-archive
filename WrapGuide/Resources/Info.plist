@@ -22,15 +22,11 @@
     <string>$(CURRENT_PROJECT_VERSION)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
-    <key>NSCameraUsageDescription</key>
-    <string>Wrap Guide uses the camera to measure your gift box and place folding guides in your space.</string>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
         <false/>
     </dict>
-    <key>UIBackgroundModes</key>
-    <array/>
     <key>UILaunchScreen</key>
     <dict>
         <key>UIColorName</key>
@@ -38,7 +34,6 @@
     </dict>
     <key>UIRequiredDeviceCapabilities</key>
     <array>
-        <string>arkit</string>
         <string>arm64</string>
     </array>
     <key>UIRequiresFullScreen</key>

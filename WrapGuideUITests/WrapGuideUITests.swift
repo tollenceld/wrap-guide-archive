@@ -2,57 +2,78 @@ import XCTest
 
 final class WrapGuideUITests: XCTestCase {
     @MainActor
-    func testManualFlowReachesGuidanceAndCompletion() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-UITesting", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        app.launch()
+    func testPlannerActionsRemainHittableWithoutScrolling() throws {
+        let app = launch(language: "en", locale: "en_US")
 
-        XCTAssertTrue(app.buttons["startWrapButton"].waitForExistence(timeout: 5))
-        app.buttons["Enter dimensions manually"].tap()
+        let calculate = app.buttons["plannerCalculateButton"]
+        XCTAssertTrue(calculate.waitForExistence(timeout: 5))
+        XCTAssertTrue(calculate.isHittable)
+        calculate.tap()
 
-        let manualContinue = app.buttons["manualContinueButton"]
-        XCTAssertTrue(manualContinue.waitForExistence(timeout: 3))
-        scrollToAndTap(manualContinue, in: app)
+        let justFit = app.buttons["paperPlan_justFit"]
+        let custom = app.buttons["customPaperButton"]
+        XCTAssertTrue(justFit.waitForExistence(timeout: 3))
+        XCTAssertTrue(justFit.isHittable)
+        justFit.tap()
+        XCTAssertTrue(custom.isHittable)
+        custom.tap()
 
-        let confirm = app.buttons["confirmDimensionsButton"]
-        XCTAssertTrue(confirm.waitForExistence(timeout: 3))
-        scrollToAndTap(confirm, in: app)
+        let close = app.buttons["customPaperCloseButton"]
+        XCTAssertTrue(close.waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["customPaperFitStatus"].exists)
+        XCTAssertTrue(close.isHittable)
+        close.tap()
 
-        let easyWrap = app.buttons["paperPlan_easyWrap"]
-        XCTAssertTrue(easyWrap.waitForExistence(timeout: 3))
-        scrollToAndTap(easyWrap, in: app)
-
-        let begin = app.buttons["beginGuidanceButton"]
-        XCTAssertTrue(begin.waitForExistence(timeout: 3))
-        scrollToAndTap(begin, in: app)
-
-        let done = app.buttons["guidanceDoneButton"]
-        XCTAssertTrue(done.waitForExistence(timeout: 3))
-        for _ in 0..<12 {
-            XCTAssertTrue(done.waitForExistence(timeout: 2))
-            done.tap()
-        }
-
-        XCTAssertTrue(app.buttons["wrapAnotherButton"].waitForExistence(timeout: 3))
+        XCTAssertTrue(custom.waitForExistence(timeout: 3))
+        XCTAssertTrue(custom.isHittable)
     }
 
     @MainActor
-    func testSimulatedScanProducesEditableDimensions() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["-UITesting", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        app.launch()
+    func testChinesePlannerFlowAndRotationResult() throws {
+        let app = launch(language: "zh-Hans", locale: "zh_CN")
 
-        app.buttons["startWrapButton"].tap()
-        XCTAssertTrue(app.buttons["confirmDimensionsButton"].waitForExistence(timeout: 6))
+        let calculate = app.buttons["plannerCalculateButton"]
+        XCTAssertTrue(calculate.waitForExistence(timeout: 5))
+        XCTAssertTrue(calculate.isHittable)
+        calculate.tap()
+
+        let custom = app.buttons["customPaperButton"]
+        XCTAssertTrue(custom.waitForExistence(timeout: 3))
+        XCTAssertTrue(custom.isHittable)
+        custom.tap()
+
+        XCTAssertTrue(app.staticTexts["customPaperFitStatus"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["90°"].exists)
+        XCTAssertTrue(app.buttons["customPaperCloseButton"].isHittable)
     }
 
     @MainActor
-    private func scrollToAndTap(_ element: XCUIElement, in app: XCUIApplication) {
-        var attempts = 0
-        while !element.isHittable && attempts < 5 {
-            app.swipeUp()
-            attempts += 1
-        }
-        element.tap()
+    func testLargestAccessibilityTextKeepsPrimaryActionVisible() throws {
+        let app = launch(
+            language: "en",
+            locale: "en_US",
+            extraArguments: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityExtraExtraExtraLarge"]
+        )
+
+        let calculate = app.buttons["plannerCalculateButton"]
+        XCTAssertTrue(calculate.waitForExistence(timeout: 5))
+        XCTAssertTrue(calculate.isHittable)
+        calculate.tap()
+
+        let custom = app.buttons["customPaperButton"]
+        XCTAssertTrue(custom.waitForExistence(timeout: 3))
+        XCTAssertTrue(custom.isHittable)
+    }
+
+    @MainActor
+    private func launch(language: String, locale: String, extraArguments: [String] = []) -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-UITesting",
+            "-AppleLanguages", "(\(language))",
+            "-AppleLocale", locale
+        ] + extraArguments
+        app.launch()
+        return app
     }
 }

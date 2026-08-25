@@ -18,24 +18,28 @@ struct PaperPlanner: PaperPlanning {
     }
 
     func evaluate(custom sheet: PaperSpec, for box: BoxDimensions) -> PaperPlan {
-        guard sheet.isValid, box.isValid else {
-            return insufficientPlan(sheet: sheet)
-        }
+        guard box.isValid else { return insufficientPlan(sheet: sheet, required: sheet) }
+        let minimum = layouts(for: box, margins: Self.justFitMargins).min { $0.cutSize.area < $1.cutSize.area }!
+        guard sheet.isValid else { return insufficientPlan(sheet: sheet, required: minimum.cutSize) }
 
         if let fit = bestFit(sheet: sheet, box: box, margins: Self.easyWrapMargins) {
-            return customPlan(sheet: sheet, fit: fit, margins: Self.easyWrapMargins, difficulty: oversized(sheet, comparedWith: fit.cutSize) ? .roomy : .comfortable)
+            return customPlan(
+                sheet: sheet,
+                fit: fit,
+                margins: Self.easyWrapMargins,
+                difficulty: oversized(sheet, comparedWith: fit.cutSize) ? .roomy : .comfortable
+            )
         }
 
         if let fit = bestFit(sheet: sheet, box: box, margins: Self.justFitMargins) {
             return customPlan(sheet: sheet, fit: fit, margins: Self.justFitMargins, difficulty: .precise)
         }
 
-        return insufficientPlan(sheet: sheet)
+        return insufficientPlan(sheet: sheet, required: minimum.cutSize)
     }
 
     private func recommendedPlan(for box: BoxDimensions, strategy: PaperStrategy, margins: PaperMargins) -> PaperPlan {
-        let candidates = layouts(for: box, margins: margins)
-        let chosen = candidates.min { $0.cutSize.area < $1.cutSize.area }!
+        let chosen = layouts(for: box, margins: margins).min { $0.cutSize.area < $1.cutSize.area }!
         return PaperPlan(
             id: strategy.rawValue,
             strategy: strategy,
@@ -66,12 +70,12 @@ struct PaperPlanner: PaperPlanning {
         )
     }
 
-    private func insufficientPlan(sheet: PaperSpec) -> PaperPlan {
+    private func insufficientPlan(sheet: PaperSpec, required: PaperSpec) -> PaperPlan {
         PaperPlan(
             id: "custom-insufficient",
             strategy: .custom,
             sheetSize: sheet,
-            cutSize: sheet,
+            cutSize: required,
             orientation: .longAxis,
             rotationDegrees: 0,
             margins: Self.justFitMargins,
@@ -88,30 +92,17 @@ struct PaperPlanner: PaperPlanning {
     }
 
     private func bestFit(sheet: PaperSpec, box: BoxDimensions, margins: PaperMargins) -> Fit? {
-        let candidates = layouts(for: box, margins: margins)
         var fits: [Fit] = []
-
-        for candidate in candidates {
-            for angleIndex in 0...360 {
-                let angle = Double(angleIndex) * 0.25
-                let radians = angle * .pi / 180
-                let boundingWidth = candidate.cutSize.widthMM * abs(cos(radians)) + candidate.cutSize.heightMM * abs(sin(radians))
-                let boundingHeight = candidate.cutSize.widthMM * abs(sin(radians)) + candidate.cutSize.heightMM * abs(cos(radians))
-
-                let direct = boundingWidth <= sheet.widthMM + 0.001 && boundingHeight <= sheet.heightMM + 0.001
-                let swapped = boundingWidth <= sheet.heightMM + 0.001 && boundingHeight <= sheet.widthMM + 0.001
-                if direct || swapped {
-                    let resolvedAngle = swapped ? angle + 90 : angle
-                    fits.append(Fit(cutSize: candidate.cutSize, orientation: candidate.orientation, rotationDegrees: resolvedAngle.truncatingRemainder(dividingBy: 180)))
-                    break
-                }
+        for candidate in layouts(for: box, margins: margins) {
+            if candidate.cutSize.widthMM <= sheet.widthMM && candidate.cutSize.heightMM <= sheet.heightMM {
+                fits.append(candidate)
+            }
+            if candidate.cutSize.widthMM <= sheet.heightMM && candidate.cutSize.heightMM <= sheet.widthMM {
+                fits.append(Fit(cutSize: candidate.cutSize, orientation: candidate.orientation, rotationDegrees: 90))
             }
         }
-
         return fits.min {
-            if abs($0.rotationDegrees - $1.rotationDegrees) > 0.001 {
-                return $0.rotationDegrees < $1.rotationDegrees
-            }
+            if $0.rotationDegrees != $1.rotationDegrees { return $0.rotationDegrees < $1.rotationDegrees }
             return $0.cutSize.area < $1.cutSize.area
         }
     }
@@ -119,8 +110,16 @@ struct PaperPlanner: PaperPlanning {
     private func layouts(for box: BoxDimensions, margins: PaperMargins) -> [Fit] {
         let box = box.sorted
         return [
-            Fit(cutSize: cutSize(x: box.lengthMM, y: box.widthMM, h: box.heightMM, margins: margins), orientation: .longAxis, rotationDegrees: 0),
-            Fit(cutSize: cutSize(x: box.widthMM, y: box.lengthMM, h: box.heightMM, margins: margins), orientation: .shortAxis, rotationDegrees: 0)
+            Fit(
+                cutSize: cutSize(x: box.lengthMM, y: box.widthMM, h: box.heightMM, margins: margins),
+                orientation: .longAxis,
+                rotationDegrees: 0
+            ),
+            Fit(
+                cutSize: cutSize(x: box.widthMM, y: box.lengthMM, h: box.heightMM, margins: margins),
+                orientation: .shortAxis,
+                rotationDegrees: 0
+            )
         ]
     }
 

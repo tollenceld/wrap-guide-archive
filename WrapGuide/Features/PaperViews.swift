@@ -1,241 +1,359 @@
 import SwiftUI
 
-struct PaperPlansView: View {
-    let coordinator: AppCoordinator
-    @State private var selectedStrategy: PaperStrategy = .easyWrap
+struct PlannerInputView: View {
+    let coordinator: PlannerCoordinator
+    @AppStorage("unitPreference") private var unitRaw = LengthUnitPreference.automatic.rawValue
 
-    private var selectedPlan: PaperPlan? {
-        coordinator.plans.first { $0.strategy == selectedStrategy }
-            ?? coordinator.plans.first
+    private var unit: LengthUnitPreference {
+        LengthUnitPreference(rawValue: unitRaw) ?? .automatic
     }
 
     var body: some View {
-        FormPage(eyebrow: "paper.eyebrow", title: "paper.title", subtitle: "paper.subtitle") {
-            if let selectedPlan {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(selectedPlan.strategy.titleKey)
-                            .font(.title2.bold())
-                        Text(selectedPlan.strategy.subtitleKey)
-                            .font(.subheadline)
-                            .foregroundStyle(AppTheme.secondaryInk)
-                            .lineLimit(2)
-                    }
-                    Spacer()
-                    StatusPill(
-                        title: selectedPlan.difficulty.localizedKey,
-                        systemImage: selectedPlan.isFeasible ? "checkmark.circle.fill" : "xmark.octagon.fill",
-                        tint: selectedPlan.isFeasible ? AppTheme.cyan : AppTheme.danger
-                    )
-                }
+        @Bindable var coordinator = coordinator
 
-                PaperPlanScene(plan: selectedPlan, dimensions: coordinator.dimensions)
-                    .frame(height: 430)
-                    .padding(.horizontal, -6)
-                    .contentTransition(.numericText())
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                PlannerHeader(
+                    eyebrow: "input.eyebrow",
+                    title: "input.title",
+                    subtitle: "input.subtitle"
+                )
 
-                PaperPlanFactBar(plan: selectedPlan, dimensions: coordinator.dimensions)
+                UnitPicker(selection: $unitRaw)
 
-                HStack(spacing: 7) {
-                    ForEach(coordinator.plans) { plan in
-                        PaperPlanChoice(
-                            plan: plan,
-                            selected: plan.strategy == selectedStrategy
-                        ) {
-                            AppHaptics.selection()
-                            withAnimation(AppMotion.spatial) {
-                                selectedStrategy = plan.strategy
-                            }
-                        }
-                    }
+                BoxDimensionPreview(dimensions: coordinator.dimensions)
+                    .frame(height: 178)
 
-                    Button {
-                        coordinator.presentedSheet = .customPaper
-                    } label: {
-                        VStack(spacing: 5) {
-                            PaperPlanGlyph(strategy: .custom)
-                            Text("paper.custom.short")
-                                .font(.caption.weight(.semibold))
-                                .lineLimit(1)
-                            Text("paper.custom.benefit")
-                                .font(.caption2)
-                                .foregroundStyle(AppTheme.secondaryInk.opacity(0.76))
-                                .lineLimit(1)
-                        }
-                        .foregroundStyle(AppTheme.secondaryInk)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 108)
-                        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(AppTheme.separator))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("customPaperButton")
-                }
-                .dynamicTypeSize(...DynamicTypeSize.xLarge)
+                DimensionInputGroup(dimensions: $coordinator.dimensions, unit: unit)
 
-                Button {
-                    AppHaptics.impact()
-                    coordinator.selectPaperPlan(selectedPlan)
-                } label: {
-                    Label("paper.usePlan", systemImage: "arrow.right")
+                Label("input.local", systemImage: "lock.shield")
+                    .font(.footnote)
+                    .foregroundStyle(AppTheme.secondaryInk)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 2)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 20)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .scrollIndicators(.hidden)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            FixedActionBar {
+                Button("input.calculate") {
+                    coordinator.calculate()
                 }
                 .buttonStyle(PrimaryButtonStyle())
-                .accessibilityIdentifier("paperPlan_\(selectedPlan.strategy.rawValue)")
+                .disabled(!coordinator.dimensions.isValid)
+                .accessibilityIdentifier("plannerCalculateButton")
             }
         }
+        .background(AppTheme.canvas.ignoresSafeArea())
+        .foregroundStyle(AppTheme.ink)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
-private struct PaperPlanChoice: View {
-    let plan: PaperPlan
-    let selected: Bool
-    let action: () -> Void
+struct PlannerResultsView: View {
+    let coordinator: PlannerCoordinator
+    @AppStorage("unitPreference") private var unitRaw = LengthUnitPreference.automatic.rawValue
+
+    private var unit: LengthUnitPreference {
+        LengthUnitPreference(rawValue: unitRaw) ?? .automatic
+    }
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 5) {
-                PaperPlanGlyph(strategy: plan.strategy, selected: selected)
-                Text(plan.strategy.shortTitleKey)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                Text(plan.strategy.benefitKey)
-                    .font(.caption2)
-                    .foregroundStyle(selected ? AppTheme.blue.opacity(0.78) : AppTheme.secondaryInk.opacity(0.76))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(selected ? AppTheme.blue : AppTheme.secondaryInk)
-            .frame(maxWidth: .infinity)
-            .frame(height: 108)
-            .background(selected ? AppTheme.blue.opacity(0.075) : AppTheme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(selected ? AppTheme.blue : AppTheme.separator, lineWidth: selected ? 2 : 1))
-            .overlay(alignment: .topTrailing) {
-                if selected {
-                    Image(systemName: "checkmark")
-                        .font(.caption2.bold())
-                        .foregroundStyle(.white)
-                        .frame(width: 20, height: 20)
-                        .background(AppTheme.blue, in: Circle())
-                        .offset(x: -7, y: 7)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 17) {
+                HStack(alignment: .top, spacing: 14) {
+                    PlannerHeader(
+                        eyebrow: "results.eyebrow",
+                        title: "results.title",
+                        subtitle: "results.subtitle"
+                    )
+                    Button("results.edit") { coordinator.editDimensions() }
+                        .font(.subheadline.weight(.semibold))
+                        .accessibilityIdentifier("editDimensionsButton")
+                }
+
+                StrategySelector(
+                    selected: coordinator.selectedStrategy,
+                    onSelect: coordinator.select
+                )
+
+                if let plan = coordinator.selectedPlan {
+                    VStack(spacing: 12) {
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(plan.strategy.titleKey)
+                                    .font(.title3.weight(.bold))
+                                Text(plan.strategy.detailKey)
+                                    .font(.subheadline)
+                                    .foregroundStyle(AppTheme.secondaryInk)
+                            }
+                            Spacer()
+                            StatusPill(title: plan.difficulty.titleKey, tint: plan.difficulty.tint)
+                        }
+
+                        PaperLayoutDiagram(plan: plan, dimensions: coordinator.dimensions)
+                            .frame(height: 288)
+
+                        Text(plan.cutSize.formatted(unit: unit))
+                            .font(.system(.title, design: .rounded, weight: .bold).monospacedDigit())
+                            .contentTransition(.numericText())
+
+                        HStack(spacing: 0) {
+                            PlanFact(label: "results.box", value: coordinator.dimensions.formatted(unit: unit))
+                            Divider().frame(height: 42)
+                            PlanFact(label: "results.overlap", value: plan.margins.seamOverlapMM.formattedLength(unit: unit))
+                        }
+                    }
+                    .plannerSurface(padding: 16, radius: 26)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        ResultLine(label: "results.endAllowance", value: plan.margins.endAllowanceMM.formattedLength(unit: unit))
+                        ResultLine(label: "results.orientation", value: plan.orientation.titleKey)
+                    }
+                    .plannerSurface()
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 22)
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
+        .scrollIndicators(.hidden)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            FixedActionBar {
+                Button("results.custom") {
+                    coordinator.presentedSheet = .customPaper
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .accessibilityIdentifier("customPaperButton")
+            }
+        }
+        .background(AppTheme.canvas.ignoresSafeArea())
+        .foregroundStyle(AppTheme.ink)
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 
-private struct PlanMetric: View {
-    let label: LocalizedStringKey
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(AppTheme.secondaryInk)
-            Text(value)
-                .font(.subheadline.weight(.bold).monospacedDigit())
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct CustomPaperView: View {
+struct CustomPaperSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let coordinator: AppCoordinator
-    @State private var widthCM = 50.0
-    @State private var heightCM = 70.0
+    let coordinator: PlannerCoordinator
+    @State private var sheet: PaperSpec
+    @AppStorage("unitPreference") private var unitRaw = LengthUnitPreference.automatic.rawValue
 
-    private var sheet: PaperSpec { PaperSpec(widthMM: widthCM * 10, heightMM: heightCM * 10) }
-    private var result: PaperPlan { coordinator.evaluateCustomPaper(sheet) }
+    init(coordinator: PlannerCoordinator) {
+        self.coordinator = coordinator
+        let suggested = coordinator.selectedPlan?.cutSize ?? PaperSpec(widthMM: 430, heightMM: 370)
+        _sheet = State(initialValue: PaperSpec(widthMM: suggested.heightMM, heightMM: suggested.widthMM))
+    }
+
+    private var unit: LengthUnitPreference {
+        LengthUnitPreference(rawValue: unitRaw) ?? .automatic
+    }
+
+    private var result: PaperPlan {
+        coordinator.evaluateCustomPaper(sheet)
+    }
 
     var body: some View {
         NavigationStack {
-            StudioPage {
-                VStack(alignment: .leading, spacing: 18) {
-                    StudioHeader(eyebrow: "paper.eyebrow", title: "custom.title", subtitle: "custom.subtitle")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 17) {
+                    PlannerHeader(
+                        eyebrow: "custom.eyebrow",
+                        title: "custom.title",
+                        subtitle: "custom.subtitle"
+                    )
 
-                    HStack(spacing: 12) {
-                        PaperDimensionField(title: "custom.width", value: $widthCM)
-                        PaperDimensionField(title: "custom.height", value: $heightCM)
-                    }
+                    PaperInputGroup(sheet: $sheet, unit: unit)
 
-                    PaperPlanScene(plan: result, dimensions: coordinator.dimensions)
-                        .frame(height: 400)
-                        .studioSurface(padding: 8)
+                    PaperLayoutDiagram(plan: result, dimensions: coordinator.dimensions)
+                        .frame(height: 250)
+                        .plannerSurface(padding: 10, radius: 24)
 
-                    CustomFitResult(plan: result)
-
-                    Button("custom.use") {
-                        AppHaptics.impact()
-                        coordinator.selectPaperPlan(result)
-                        dismiss()
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .disabled(!result.isFeasible)
+                    CustomFitResult(plan: result, unit: unit)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 20)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .scrollIndicators(.hidden)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                FixedActionBar {
+                    Button("custom.done") { dismiss() }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .accessibilityIdentifier("customPaperCloseButton")
                 }
             }
-            .navigationTitle("custom.title")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("action.cancel") { dismiss() }
-                }
-            }
+            .background(AppTheme.canvas.ignoresSafeArea())
+            .foregroundStyle(AppTheme.ink)
+            .toolbar(.hidden, for: .navigationBar)
         }
         .presentationDetents([.large])
     }
 }
 
-private struct PaperDimensionField: View {
-    let title: LocalizedStringKey
-    @Binding var value: Double
+private struct UnitPicker: View {
+    @Binding var selection: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.secondaryInk)
-            HStack(spacing: 4) {
-                TextField("0.0", value: $value, format: .number.precision(.fractionLength(1)))
-                    .keyboardType(.decimalPad)
-                    .font(.title3.weight(.bold).monospacedDigit())
-                Text("cm")
-                    .font(.subheadline)
-                    .foregroundStyle(AppTheme.secondaryInk)
+        Picker("unit.title", selection: $selection) {
+            ForEach(LengthUnitPreference.allCases) { unit in
+                Text(unit.titleKey).tag(unit.rawValue)
             }
         }
-        .studioSurface(padding: 14, radius: 18)
+        .pickerStyle(.segmented)
+        .accessibilityIdentifier("unitPicker")
+    }
+}
+
+private struct DimensionInputGroup: View {
+    @Binding var dimensions: BoxDimensions
+    let unit: LengthUnitPreference
+
+    var body: some View {
+        VStack(spacing: 0) {
+            MeasurementField(label: "dimension.length", axis: "L", tint: AppTheme.blue, value: binding(\.lengthMM), unit: unit)
+            Divider()
+            MeasurementField(label: "dimension.width", axis: "W", tint: AppTheme.cyan, value: binding(\.widthMM), unit: unit)
+            Divider()
+            MeasurementField(label: "dimension.height", axis: "H", tint: AppTheme.amber, value: binding(\.heightMM), unit: unit)
+        }
+        .plannerSurface(padding: 0)
+    }
+
+    private func binding(_ keyPath: WritableKeyPath<BoxDimensions, Double>) -> Binding<Double> {
+        Binding(
+            get: { dimensions[keyPath: keyPath] },
+            set: { dimensions[keyPath: keyPath] = $0 }
+        )
+    }
+}
+
+private struct PaperInputGroup: View {
+    @Binding var sheet: PaperSpec
+    let unit: LengthUnitPreference
+
+    var body: some View {
+        VStack(spacing: 0) {
+            MeasurementField(label: "custom.width", axis: "W", tint: AppTheme.blue, value: $sheet.widthMM, unit: unit)
+            Divider()
+            MeasurementField(label: "custom.height", axis: "H", tint: AppTheme.cyan, value: $sheet.heightMM, unit: unit)
+        }
+        .plannerSurface(padding: 0)
+    }
+}
+
+private struct MeasurementField: View {
+    let label: LocalizedStringKey
+    let axis: String
+    let tint: Color
+    @Binding var value: Double
+    let unit: LengthUnitPreference
+
+    private var divisor: Double { unit.resolved == .imperial ? 25.4 : 10 }
+    private var suffix: String { unit.resolved == .imperial ? "in" : "cm" }
+
+    private var displayValue: Binding<Double> {
+        Binding(get: { value / divisor }, set: { value = $0 * divisor })
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(axis)
+                .font(.caption.weight(.heavy))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9))
+            Text(label)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(AppTheme.secondaryInk)
+            Spacer()
+            TextField("0.0", value: displayValue, format: .number.precision(.fractionLength(1)))
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .font(.title3.weight(.bold).monospacedDigit())
+                .frame(width: 94)
+                .accessibilityLabel(label)
+            Text(suffix)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(AppTheme.secondaryInk)
+                .frame(width: 28, alignment: .leading)
+        }
+        .padding(.horizontal, 15)
+        .padding(.vertical, 13)
+    }
+}
+
+private struct StrategySelector: View {
+    let selected: PaperStrategy
+    let onSelect: (PaperStrategy) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            strategyButton(.easyWrap)
+            strategyButton(.justFit)
+        }
+        .padding(4)
+        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 17).stroke(AppTheme.separator))
+    }
+
+    private func strategyButton(_ strategy: PaperStrategy) -> some View {
+        Button {
+            onSelect(strategy)
+        } label: {
+            VStack(spacing: 2) {
+                Text(strategy.titleKey).font(.subheadline.weight(.bold))
+                Text(strategy.shortDetailKey).font(.caption2)
+            }
+            .foregroundStyle(selected == strategy ? .white : AppTheme.secondaryInk)
+            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .background(selected == strategy ? AppTheme.blue : .clear, in: RoundedRectangle(cornerRadius: 13))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("paperPlan_\(strategy.rawValue)")
+        .accessibilityAddTraits(selected == strategy ? .isSelected : [])
     }
 }
 
 private struct CustomFitResult: View {
     let plan: PaperPlan
+    let unit: LengthUnitPreference
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                StatusPill(
-                    title: plan.difficulty.localizedKey,
-                    systemImage: plan.isFeasible ? "checkmark.seal.fill" : "xmark.octagon.fill",
-                    tint: plan.isFeasible ? AppTheme.cyan : AppTheme.danger
-                )
-                Spacer()
-                if plan.rotationDegrees != 0 {
-                    Label(String(format: "%.0f°", plan.rotationDegrees), systemImage: "rotate.right")
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("custom.result")
                         .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.secondaryInk)
+                    Text(plan.difficulty.titleKey)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(plan.difficulty.tint)
+                        .accessibilityIdentifier("customPaperFitStatus")
+                }
+                Spacer()
+                if plan.isFeasible && plan.rotationDegrees != 0 {
+                    Label(String(format: "%.0f°", plan.rotationDegrees), systemImage: "rotate.right")
+                        .font(.headline.weight(.semibold))
                         .foregroundStyle(AppTheme.blue)
                 }
             }
 
+            ResultLine(
+                label: plan.isFeasible ? "custom.cutSize" : "custom.minimum",
+                value: plan.cutSize.formatted(unit: unit)
+            )
             if plan.isFeasible {
-                DetailRow(label: "custom.cutSize", value: plan.cutSize.formatted())
-                DetailRow(label: "custom.remaining", value: String(format: "%.0f%%", plan.wasteRatio * 100))
+                ResultLine(label: "results.overlap", value: plan.margins.seamOverlapMM.formattedLength(unit: unit))
                 if plan.recommendsCutting {
                     Label("custom.cutRecommended", systemImage: "scissors")
-                        .font(.subheadline)
+                        .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppTheme.amber)
                 }
             } else {
@@ -244,54 +362,119 @@ private struct CustomFitResult: View {
                     .foregroundStyle(AppTheme.secondaryInk)
             }
         }
-        .studioSurface()
+        .plannerSurface()
     }
 }
 
-struct DetailRow: View {
+private struct PlanFact: View {
     let label: LocalizedStringKey
     let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label).font(.caption).foregroundStyle(AppTheme.secondaryInk)
+            Text(value)
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.62)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+    }
+}
+
+private struct ResultLine: View {
+    let label: LocalizedStringKey
+    let value: LocalizedStringKey
+
+    init(label: LocalizedStringKey, value: LocalizedStringKey) {
+        self.label = label
+        self.value = value
+    }
+
+    init(label: LocalizedStringKey, value: String) {
+        self.label = label
+        self.value = LocalizedStringKey(value)
+    }
 
     var body: some View {
         HStack {
             Text(label).foregroundStyle(AppTheme.secondaryInk)
             Spacer()
-            Text(value).fontWeight(.semibold).monospacedDigit()
+            Text(value).fontWeight(.semibold).multilineTextAlignment(.trailing)
         }
         .font(.subheadline)
     }
 }
 
-private extension PaperStrategy {
+private extension LengthUnitPreference {
     var titleKey: LocalizedStringKey {
         switch self {
-        case .easyWrap: "paper.easy.title"
-        case .justFit: "paper.just.title"
-        case .custom: "paper.custom.title"
+        case .automatic: "unit.automatic"
+        case .metric: "unit.metric"
+        case .imperial: "unit.imperial"
+        }
+    }
+}
+
+extension PaperStrategy {
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .easyWrap: "strategy.easy"
+        case .justFit: "strategy.just"
+        case .custom: "strategy.custom"
         }
     }
 
-    var shortTitleKey: LocalizedStringKey {
+    var detailKey: LocalizedStringKey {
         switch self {
-        case .easyWrap: "paper.easy.short"
-        case .justFit: "paper.just.short"
-        case .custom: "paper.custom.short"
+        case .easyWrap: "strategy.easy.detail"
+        case .justFit: "strategy.just.detail"
+        case .custom: "strategy.custom.detail"
         }
     }
 
-    var subtitleKey: LocalizedStringKey {
+    var shortDetailKey: LocalizedStringKey {
         switch self {
-        case .easyWrap: "paper.easy.subtitle"
-        case .justFit: "paper.just.subtitle"
-        case .custom: "paper.custom.subtitle"
+        case .easyWrap: "strategy.easy.short"
+        case .justFit: "strategy.just.short"
+        case .custom: "strategy.custom.short"
+        }
+    }
+}
+
+extension PaperDifficulty {
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .roomy: "difficulty.roomy"
+        case .comfortable: "difficulty.comfortable"
+        case .precise: "difficulty.precise"
+        case .insufficient: "difficulty.insufficient"
         }
     }
 
-    var benefitKey: LocalizedStringKey {
+    var tint: Color {
         switch self {
-        case .easyWrap: "paper.easy.benefit"
-        case .justFit: "paper.just.benefit"
-        case .custom: "paper.custom.benefit"
+        case .roomy, .comfortable: AppTheme.cyan
+        case .precise: AppTheme.amber
+        case .insufficient: AppTheme.danger
         }
+    }
+}
+
+private extension BoxOrientation {
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .longAxis: "orientation.long"
+        case .shortAxis: "orientation.short"
+        }
+    }
+}
+
+private extension Double {
+    func formattedLength(unit: LengthUnitPreference) -> String {
+        unit.resolved == .imperial
+            ? String(format: "%.1f in", self / 25.4)
+            : String(format: "%.1f cm", self / 10)
     }
 }
