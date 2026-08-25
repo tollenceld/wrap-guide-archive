@@ -1,0 +1,66 @@
+name: WrapGuide
+options:
+  bundleIdPrefix: com.wrapguide
+  deploymentTarget:
+    iOS: "18.0"
+  xcodeVersion: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    TARGETED_DEVICE_FAMILY: "1"
+    SUPPORTS_MACCATALYST: NO
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+targets:
+  WrapGuide:
+    type: application
+    platform: iOS
+    sources:
+      - path: WrapGuide
+        excludes:
+          - "Resources/**"
+      - path: WrapGuide/Resources
+        buildPhase: resources
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wrapguide.app
+        PRODUCT_NAME: Wrap Guide
+        PRODUCT_MODULE_NAME: WrapGuide
+        INFOPLIST_FILE: WrapGuide/Resources/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: 1.0
+        CURRENT_PROJECT_VERSION: 1
+        ENABLE_PREVIEWS: YES
+    scheme:
+      testTargets:
+        - WrapGuideTests
+        - WrapGuideUITests
+  WrapGuideTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: WrapGuideTests
+    dependencies:
+      - target: WrapGuide
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wrapguide.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Wrap Guide.app/Wrap Guide"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  WrapGuideUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: WrapGuideUITests
+    dependencies:
+      - target: WrapGuide
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wrapguide.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: WrapGuide
